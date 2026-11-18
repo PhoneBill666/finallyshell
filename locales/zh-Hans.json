@@ -452,7 +452,7 @@
   "optionCmdBarPaths": "路径选择",
   "optionCmdBarPathsNote": "分多列列出正在输入的路径所在的服务器文件夹。",
   "optionCmdBarHistory": "历史命令",
-  "optionCmdBarHistoryNote": "列出以前发送过的命令；从输入框发送的命令按主机保存。",
+  "optionCmdBarHistoryNote": "列出从输入框发送和在终端里输入过的命令，按主机保存。",
   "optionCmdBarCommands": "命令补全",
   "optionCmdBarCommandsNote": "在第一个词上列出服务器 PATH 里的命令，每次连接读取一次。",
   "optionServerHistory": "读取服务器的 shell 历史",

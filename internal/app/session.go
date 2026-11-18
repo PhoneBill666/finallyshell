@@ -278,10 +278,16 @@ func (a *App) openPaneShell(s *Session, p *pane, client *ssh.Client, spec shellS
 		return nil, &stepError{"shell", err}
 	}
 	topts := spec.topts
-	topts.Conn = termenc.Wrap(shell, spec.enc)
+	enter, conn := newEnterConn(termenc.Wrap(shell, spec.enc), func(line string) {
+		a.post(func() { a.typedLine(s, p, line) })
+	})
+	topts.Conn = conn
 	keys := keySequences(spec.bs, spec.del, func() *terminal.Terminal { return p.term })
 	topts.OnKey = func(mods ui.Modifiers, key ui.Key) bool {
 		p.shellKey(mods, key) // for the file panel to follow a cd, and the tab its agent
+		if mods == 0 && key == ui.KeyEnter && a.historyOn() {
+			enter.pressed() // for the history, the line it ends
+		}
 		return keys != nil && keys(mods, key)
 	}
 	topts.OnExit = func(int) { a.post(func() { a.paneExited(s, p) }) }
@@ -290,6 +296,7 @@ func (a *App) openPaneShell(s *Session, p *pane, client *ssh.Client, spec shellS
 		shell.Close()
 		return nil, &stepError{"terminal", err}
 	}
+	enter.term.Store(term)
 	return term, nil
 }
 

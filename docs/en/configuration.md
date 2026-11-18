@@ -287,7 +287,8 @@ the credential store.
 ## Command history
 
 The [command bar](features.md#command-bar) keeps the commands sent from
-it in `history/<host ID>.txt`, a file per host named by the host's `id`
+it, and those typed in an SSH session's terminal, in
+`history/<host ID>.txt`, a file per host named by the host's `id`
 in `hosts.json`: plain UTF-8 text, one command per line, the oldest first,
 each command once (one sent again moves to the end). There is no limit on
 the number of commands; once a file passes 10 MB, the oldest are dropped.

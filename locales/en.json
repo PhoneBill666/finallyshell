@@ -609,7 +609,7 @@
   "optionCmdBarPaths": "Path picker",
   "optionCmdBarPathsNote": "Lists the server's folder for the path being typed, in columns.",
   "optionCmdBarHistory": "History picker",
-  "optionCmdBarHistoryNote": "Lists the commands sent before; the bar keeps those it sends for each host.",
+  "optionCmdBarHistoryNote": "Lists the commands sent from the bar or typed in the terminal, for each host.",
   "optionCmdBarCommands": "Command completion",
   "optionCmdBarCommandsNote": "Lists the commands on the server's PATH for the first word, read once per connection.",
   "optionServerHistory": "Read the server's shell history",

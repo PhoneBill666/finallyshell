@@ -4596,11 +4596,11 @@ func (msgs Messages) OptionCmdBarHistory() string {
 	return Catalog.Format(msgs.locale, "optionCmdBarHistory", nil)
 }
 
-// OptionCmdBarHistoryNote says "Lists the commands sent before; the bar keeps those it sends for each host."
+// OptionCmdBarHistoryNote says "Lists the commands sent from the bar or typed in the terminal, for each host."
 // in the language the app shows.
 func OptionCmdBarHistoryNote() string { return In(i18n.Locale()).OptionCmdBarHistoryNote() }
 
-// OptionCmdBarHistoryNote says "Lists the commands sent before; the bar keeps those it sends for each host."
+// OptionCmdBarHistoryNote says "Lists the commands sent from the bar or typed in the terminal, for each host."
 // in the language of msgs.
 func (msgs Messages) OptionCmdBarHistoryNote() string {
 	return Catalog.Format(msgs.locale, "optionCmdBarHistoryNote", nil)

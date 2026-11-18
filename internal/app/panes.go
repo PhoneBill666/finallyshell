@@ -60,6 +60,10 @@ type pane struct {
 	find  findState          // the find bar over its terminal
 	shell shellDirState      // its shell's folder and foreground program
 	title string             // the title a local terminal's program set
+	// typed is the command being typed in its terminal, a line each,
+	// kept in the host's history once the shell asks for no more of it
+	// (typedhistory.go): nil for none.
+	typed []string
 	// stop ends its shell's follower: nil while none runs.
 	stop context.CancelFunc
 	// pick is which of the connection's shells this pane's is, as its

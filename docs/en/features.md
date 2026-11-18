@@ -1220,14 +1220,21 @@ and lists its keys (see [Terminal › Command bar](#terminal--command-bar)).
   newlines shown as ↵ and all its lines in its tooltip. "Clear list"
   deletes the host's history.
 - The history is the app's own, per host: every command sent from the
-  bar, each once, newest last, with no limit on how many (the file is cut
-  from the oldest past 10 MB; see
-  [configuration.md](configuration.md#command-history)). Below it come
-  the commands of the server's `~/.bash_history` and `~/.zsh_history`,
-  read over SFTP once per connection. bash writes its history file only
-  when the shell exits, unless `~/.bashrc` has
-  `PROMPT_COMMAND="history -a"`, which writes each command as it ends. A
-  command of several lines is read as one:
+  bar or typed in the terminal of an SSH session, each once, newest
+  last, with no limit on how many (the file is cut from the oldest past
+  10 MB; see [configuration.md](configuration.md#command-history)). A
+  command typed in the terminal is read off the screen as Enter ends it,
+  once the server has echoed the line, however late: what follows the
+  prompt's first `$ `, `# ` or `% `, the ends of bash's, root's and
+  zsh's prompts. A command whose next lines come after the shell's `> `,
+  as a quoted text, a heredoc or lines ending with a backslash, is kept
+  whole. Lines after other prompts, as Python's `>>>`, and what the shell
+  does not echo, as a password, are not kept.
+- Below the app's history come the commands of the server's
+  `~/.bash_history` and `~/.zsh_history`, read over SFTP once per
+  connection. bash writes its history file only when the shell exits,
+  unless `~/.bashrc` has `PROMPT_COMMAND="history -a"`, which writes
+  each command as it ends. A command of several lines is read as one:
   zsh's whole, as zsh marks its newlines; bash's whole when
   `HISTTIMEFORMAT` is set, as bash then puts a time line before each
   command; otherwise bash's file does not mark where a command of several

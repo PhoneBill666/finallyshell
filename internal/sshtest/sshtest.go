@@ -239,6 +239,14 @@ func (s *Server) ShellInput(i int) string {
 	return sh.in.String()
 }
 
+// ShellOutput prints data in the i-th shell opened, from 0, as the shell
+// writes its prompt, the echo of what it read and its commands' output.
+func (s *Server) ShellOutput(i int, data string) {
+	if sh := s.shell(i); sh != nil {
+		sh.ch.Write([]byte(data))
+	}
+}
+
 // EndShell ends the i-th shell opened, from 0, as a shell that exits:
 // exit status 0, then the channel's close. The connection stays.
 func (s *Server) EndShell(i int) {

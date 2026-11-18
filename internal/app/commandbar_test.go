@@ -208,6 +208,13 @@ func TestCommandBarSeveralLines(t *testing.T) {
 // the bar.
 func barServer(t *testing.T) (*App, *fakePlatform, *Session, *ui.Tester, string) {
 	t.Helper()
+	a, p, s, tt, home, _ := barServerSrv(t)
+	return a, p, s, tt, home
+}
+
+// barServerSrv is barServer, with its server.
+func barServerSrv(t *testing.T) (*App, *fakePlatform, *Session, *ui.Tester, string, *sshtest.Server) {
+	t.Helper()
 	home := t.TempDir()
 	for _, d := range []string{"etc/ssh", "etc/nginx", "docs", ".config"} {
 		os.MkdirAll(filepath.Join(home, d), 0o755)
@@ -243,7 +250,7 @@ func barServer(t *testing.T) (*App, *fakePlatform, *Session, *ui.Tester, string)
 	t.Cleanup(a.CloseAll)
 	s.term().Feed([]byte("tester@web-1:~$ "))
 	focusBar(t, tt)
-	return a, p, s, tt, home
+	return a, p, s, tt, home, srv
 }
 
 // popupDone waits for what the popup reads.

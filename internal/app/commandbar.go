@@ -348,6 +348,9 @@ func (a *App) openPopup(s *Session, p barPopup, start int) {
 	if p == popupPaths {
 		b.data.dirs = nil // listed again as the picker opens
 	}
+	if sp := s.pane(); p == popupHistory && sp != nil {
+		a.settleTyped(s, sp) // what was typed in the terminal just before
+	}
 }
 
 // openHistory opens the history picker, for what is typed.
