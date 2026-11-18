@@ -27,9 +27,16 @@ import (
 //   - Up, or the history shortcut: the history picker, the commands sent before that
 //     start with what is typed; Left and Right highlight one field (word)
 //     of the command highlighted, and Enter takes the field, or the whole
-//     command when none is highlighted.
+//     command when none is highlighted. A command of several lines, as
+//     one ending its lines with backslashes, is one entry, its newlines
+//     shown as ↵; taken, it fills the bar with its lines.
 //   - Esc: closes the popup, and then gives the keyboard back to the
 //     terminal; the Focus command bar shortcut goes back and forth.
+//
+// The bar is one line, a text area as high as its lines (up to
+// barMaxLines) once its text has a newline, until it is emptied:
+// Shift+Enter starts a new line, and Enter sends them all, as one command
+// (sendLine).
 //
 // The bar takes no key from the terminal: it has the keys only while it
 // has the focus. What it needs from the server, the listings, the
@@ -60,6 +67,9 @@ type cmdBar struct {
 	focus    bool // give the bar the keyboard in the next frame
 	toTerm   bool // give the terminal the keyboard in the next frame
 	focused  bool // the bar had the keyboard in the last frame
+	// lines is whether the bar is a text area, for a text of several
+	// lines: from when its text has a newline until it is empty.
+	lines bool
 
 	popup  barPopup
 	sel    int  // the item highlighted
@@ -76,6 +86,10 @@ type cmdBar struct {
 
 	data barData // what the popups show, read from the server
 }
+
+// barMaxLines is the most lines the bar shows of a text of several, past
+// which it scrolls.
+const barMaxLines = 8
 
 // commandBarOn tells whether the bar shows (Show the command bar).
 func (a *App) commandBarOn() bool { return !a.settings.NoCommandBar }
@@ -126,6 +140,17 @@ func historyKey(goos string) keyCombo {
 func (a *App) commandBar(c *ui.Context, s *Session) {
 	b := &s.bar
 	live := barLive(s)
+	if lines := b.text != "" && (b.lines || strings.Contains(b.text, "\n")); lines != b.lines {
+		// Another input: it takes the keyboard and the caret from the
+		// one before.
+		b.lines = lines
+		if b.focused {
+			b.focus = true
+		}
+		if !b.caretSet {
+			b.newCaret, b.caretSet = b.barCaret(b.text), true
+		}
+	}
 	row := ui.Row(c.Key("command-bar")).Padding(4, 8).Gap(6).AlignItems(ui.Center).
 		Background(theme.Background).BorderWidth(1, 0, 0, 0).BorderColor(colors.line)
 	var input ui.Element
@@ -134,7 +159,12 @@ func (a *App) commandBar(c *ui.Context, s *Session) {
 		// The icon says what the bar is for: it has no placeholder, but
 		// for which pane it sends to while the session has several.
 		ui.Icon(c, icons.Get("terminal")).FontSize(13).TextColor(theme.TextMuted)
-		input = ui.TextInput(c, &b.text).Grow(1).MinWidth(0).Label(locales.CmdBarLabel()).Disabled(!live)
+		if b.lines {
+			input = ui.TextArea(c.Key("command-lines"), &b.text).Lines(1, barMaxLines)
+		} else {
+			input = ui.TextInput(c, &b.text)
+		}
+		input.Grow(1).MinWidth(0).Label(locales.CmdBarLabel()).Disabled(!live)
 		placeholder := ""
 		if s.split() {
 			placeholder = locales.CmdBarFocusedPane()
@@ -220,10 +250,18 @@ func (a *App) barKey(s *Session, k ui.TextKey) bool {
 	case k.Key == ui.KeyEnter && k.Mods == 0:
 		a.sendBar(s, e)
 		return true
+	case k.Key == ui.KeyEnter && k.Mods == ui.Shift:
+		// A new line, of a command of several.
+		r := []rune(text)
+		head := string(r[:caret]) + "\n"
+		b.setBar(e, head+string(r[caret:]), utf8.RuneCountInString(head))
+		return true
 	case k.Key == ui.KeyTab && k.Mods == 0:
 		a.complete(s, e, caret)
 		return true
-	case k.Key == ui.KeyUp && k.Mods == 0 && a.historyOn():
+	case k.Key == ui.KeyUp && k.Mods == 0 && a.historyOn() && !strings.ContainsRune(string([]rune(text)[:caret]), '\n'):
+		// On the first line: the lines below it have Up move to the one
+		// above.
 		a.openHistory(s)
 		return true
 	case k.Key == ui.KeyEscape && k.Mods == 0:
@@ -250,18 +288,27 @@ func (a *App) sendBar(s *Session, e barEdit) {
 }
 
 // sendLine sends line to s's shell as typed in the terminal, through the
-// session's encoding: to the shell of its focused pane. With enter it is
-// followed by a carriage return, as Enter: the line runs, the folder
-// follower looks again, and the line is kept in the host's history.
-// Without, it is only typed, for the user to finish; the bar and the
-// quick commands (quickcmds.go) send through it.
+// session's encoding: to the shell of its focused pane. A line with
+// newlines, a command of several lines from the bar, is pasted, as the
+// terminal pastes: bracketed when the shell asks, so that it takes the
+// lines as one command, as it would from its own history, rather than
+// run each as it comes. With enter it is followed by a carriage return,
+// as Enter: the line runs, the folder follower looks again, and the line
+// is kept in the host's history. Without, it is only typed, for the user
+// to finish; the bar and the quick commands (quickcmds.go) send through
+// it.
 func (a *App) sendLine(s *Session, line string, enter bool) {
 	term := s.term()
+	typed := line
+	if strings.Contains(line, "\n") {
+		term.Paste(line)
+		typed = ""
+	}
 	if !enter {
-		term.Send([]byte(line))
+		term.Send([]byte(typed))
 		return
 	}
-	term.Send([]byte(line + "\r"))
+	term.Send([]byte(typed + "\r"))
 	s.shellCommandSent()
 	if cmd := strings.TrimSpace(line); a.historyOn() && config.Keepable(cmd) {
 		a.addHistory(s.historyID(), cmd)
@@ -728,9 +775,12 @@ func (a *App) historyRows(c *ui.Context, s *Session, view popupContent) {
 			row.Background(theme.Selection)
 		}
 		field := -1 // a field clicked
+		if strings.Contains(it.name, "\n") {
+			row.Tooltip(it.name) // all its lines
+		}
 		row.Children(func() {
 			if !on || b.field < 0 {
-				t := ui.Text(c, it.name).SingleLine().Ellipsis("…").MinWidth(0).Padding(0, 3)
+				t := ui.Text(c, historyLine(it.name)).SingleLine().Ellipsis("…").MinWidth(0).Padding(0, 3)
 				if on {
 					t.TextColor(theme.AccentText)
 				}
@@ -739,7 +789,7 @@ func (a *App) historyRows(c *ui.Context, s *Session, view popupContent) {
 			// One text a field, the one highlighted in the accent color.
 			rs := []rune(it.name)
 			for fi, f := range commandFields(it.name) {
-				t := ui.Text(c, string(rs[f.start:f.end])).SingleLine().Padding(0, 3).Radius(3)
+				t := ui.Text(c, historyLine(string(rs[f.start:f.end]))).SingleLine().Padding(0, 3).Radius(3)
 				if fi == b.field {
 					t.Background(theme.Accent).TextColor(theme.AccentText).Shrink(0)
 				} else {
@@ -755,6 +805,12 @@ func (a *App) historyRows(c *ui.Context, s *Session, view popupContent) {
 			a.chooseInView(s, view, i)
 		}
 	}).MaxHeight(popupMaxHeight)
+}
+
+// historyLine writes a command of several lines on one, for the history
+// picker: a ↵ for each newline.
+func historyLine(cmd string) string {
+	return strings.ReplaceAll(cmd, "\n", " ↵ ")
 }
 
 // chooseInView takes item i of the popup as a click does, the view
@@ -774,10 +830,23 @@ func (a *App) barFocus(s *Session, view ui.Element) {
 	}
 }
 
-// The words of the bar: separated by blanks, a blank escaped with a
-// backslash belonging to its word, as the shell reads it.
+// The words of the bar: separated by blanks and newlines, a blank escaped
+// with a backslash belonging to its word, as the shell reads it; a
+// backslash before a newline joins the lines, and belongs to no word.
 
-func isBlank(r rune) bool { return r == ' ' || r == '\t' }
+func isBlank(r rune) bool { return r == ' ' || r == '\t' || r == '\n' }
+
+// wordEnd tells whether r[i] ends a word: a blank not escaped, or a
+// newline, or the backslash before one.
+func wordEnd(r []rune, i int) bool {
+	switch {
+	case r[i] == '\n':
+		return true
+	case r[i] == '\\' && i+1 < len(r) && r[i+1] == '\n':
+		return !escapedAt(r, i)
+	}
+	return isBlank(r[i]) && !escapedAt(r, i)
+}
 
 // escapedAt tells whether r[i] follows an odd number of backslashes.
 func escapedAt(r []rune, i int) bool {
@@ -791,11 +860,11 @@ func escapedAt(r []rune, i int) bool {
 // wordBounds returns where the word at caret starts and ends, in runes.
 func wordBounds(r []rune, caret int) (start, end int) {
 	start = min(max(caret, 0), len(r))
-	for start > 0 && !(isBlank(r[start-1]) && !escapedAt(r, start-1)) {
+	for start > 0 && !wordEnd(r, start-1) {
 		start--
 	}
 	end = start
-	for end < len(r) && !(isBlank(r[end]) && !escapedAt(r, end)) {
+	for end < len(r) && !wordEnd(r, end) {
 		end++
 	}
 	return start, max(end, caret)
@@ -885,6 +954,13 @@ func commandFields(cmd string) []field {
 			if ch == quote {
 				quote = 0
 			}
+		case ch == '\\' && i+1 < len(r) && r[i+1] == '\n':
+			// The lines go on: a blank between fields.
+			if start >= 0 {
+				out = append(out, field{start, i})
+				start = -1
+			}
+			i++
 		case ch == '\\':
 			if start < 0 {
 				start = i

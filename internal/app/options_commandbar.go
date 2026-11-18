@@ -83,6 +83,7 @@ func (a *App) commandBarKeys(goos string) []commandBarKey {
 	}
 	return []commandBarKey{
 		{label(keyCombo{0, ui.KeyEnter}), locales.CmdBarKeyEnter()},
+		{label(keyCombo{ui.Shift, ui.KeyEnter}), locales.CmdBarKeyNewLine()},
 		{label(keyCombo{0, ui.KeyTab}), locales.CmdBarKeyTab()},
 		{label(keyCombo{0, ui.KeyUp}, historyKey(goos)), locales.CmdBarKeyHistory()},
 		{label(keyCombo{0, ui.KeyLeft}, keyCombo{0, ui.KeyRight}), locales.CmdBarKeyFields()},

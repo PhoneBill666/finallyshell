@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// A host's history keeps each command once, the newest last, and goes
-// with the host or with all of them.
+// A host's history keeps each command once, the newest last, a command of
+// several lines too, and goes with the host or with all of them.
 func TestHistoryFile(t *testing.T) {
 	t.Setenv("FINALLYSHELL_DIR", t.TempDir())
 	if list, err := LoadHistory("h1"); err != nil || list != nil {
@@ -23,11 +23,11 @@ func TestHistoryFile(t *testing.T) {
 	}
 	AddHistory("h2", "uptime")
 	list, err := LoadHistory("h1")
-	if want := []string{"cd /etc", "ls -l", "df -h"}; err != nil || !slices.Equal(list, want) {
+	if want := []string{"cd /etc", "two\nlines", "ls -l", "df -h"}; err != nil || !slices.Equal(list, want) {
 		t.Errorf("history %q, %v; want %q", list, err, want)
 	}
 	data, _ := os.ReadFile(filepath.Join(HistoryDir(), "h1.txt"))
-	if string(data) != "cd /etc\nls -l\ndf -h\n" {
+	if string(data) != "cd /etc\ntwo\x1elines\nls -l\ndf -h\n" {
 		t.Errorf("file %q", data)
 	}
 
@@ -114,7 +114,7 @@ func TestTrimHistory(t *testing.T) {
 
 // bash's file, with and without times, and zsh's extended one, metafied.
 func TestParseShellHistory(t *testing.T) {
-	bash := "ls -l\n#1700000000\ncd /etc\n\nls -l\nyum -y install epel-release\n"
+	bash := "ls -l\n#1700000000\ncd /etc\n\n#1700000001\nls -l\n#1700000002\nyum -y install epel-release\n"
 	if got, want := ParseShellHistory([]byte(bash), false), []string{"cd /etc", "ls -l", "yum -y install epel-release"}; !slices.Equal(got, want) {
 		t.Errorf("bash %q, want %q", got, want)
 	}
@@ -125,7 +125,9 @@ func TestParseShellHistory(t *testing.T) {
 	}
 
 	// zsh metafies the bytes 0x83 to 0x9d: "ă" is c4 83, written c4 83
-	// a3; "中" (e4 b8 ad) is written as it is; "…" (e2 80 a6) too.
+	// a3; "中" (e4 b8 ad) is written as it is; "…" (e2 80 a6) too. A
+	// command of several lines is one, without the backslash zsh puts
+	// before each newline.
 	zsh := ": 1700000000:0;ls -la\n" +
 		": 1700000005:2;echo \xc4\x83\xa3 中\n" +
 		": 1700000009:0;for i in 1 2; do\\\n" +
@@ -133,7 +135,7 @@ func TestParseShellHistory(t *testing.T) {
 		"done\n" +
 		": 1700000010:0;git status\n" +
 		"plain line\n"
-	want := []string{"ls -la", "echo ă 中", "git status", "plain line"}
+	want := []string{"ls -la", "echo ă 中", "for i in 1 2; do\necho $i\ndone", "git status", "plain line"}
 	if got := ParseShellHistory([]byte(zsh), true); !slices.Equal(got, want) {
 		t.Errorf("zsh %q, want %q", got, want)
 	}
@@ -148,6 +150,58 @@ func TestParseShellHistory(t *testing.T) {
 	// A line that only looks like zsh's stays as it is.
 	if got := ParseShellHistory([]byte(": not:zsh;x\n"), true); !slices.Equal(got, []string{": not:zsh;x"}) {
 		t.Errorf("not extended %q", got)
+	}
+}
+
+// Commands of several lines read as one each, as typed: a command whose
+// lines end with a backslash, as docker's, and one with a quoted text of
+// several lines.
+func TestParseShellHistoryLines(t *testing.T) {
+	docker := "docker run -d \\\n  -p 80:80 \\\n  nginx"
+	python := "python3 -c '\\\nfrom http.server import HTTPServer\\\n    print(1)\\\n'"
+	// zsh puts a backslash before each newline, after the command's own.
+	zsh := ": 1700000000:0;ls\n" +
+		": 1700000001:0;" + strings.ReplaceAll(docker, "\n", "\\\n") + "\n" +
+		": 1700000002:0;" + strings.ReplaceAll(python, "\n", "\\\n") + "\n" +
+		": 1700000003:0;" + strings.ReplaceAll("cat <<EOF\nhi\nEOF", "\n", "\\\n") + "\n" +
+		// A command ending with backslashes is not joined to the next.
+		": 1700000004:0;echo \\\\\n" +
+		": 1700000005:0;df -h\n"
+	want := []string{"ls", docker, python, "cat <<EOF\nhi\nEOF", `echo \\`, "df -h"}
+	if got := ParseShellHistory([]byte(zsh), true); !slices.Equal(got, want) {
+		t.Errorf("zsh %q,\nwant %q", got, want)
+	}
+	// zsh without the extended format.
+	plain := "ls\n" + strings.ReplaceAll(docker, "\n", "\\\n") + "\ndf -h\n"
+	if got := ParseShellHistory([]byte(plain), true); !slices.Equal(got, []string{"ls", docker, "df -h"}) {
+		t.Errorf("zsh, not extended: %q", got)
+	}
+
+	// bash writes the lines as they are.
+	bash := "ls\n" + docker + "\n" + python + "\necho \\\\\ndf -h\n"
+	if got := ParseShellHistory([]byte(bash), false); !slices.Equal(got, []string{"ls", docker, python, `echo \\`, "df -h"}) {
+		t.Errorf("bash %q", got)
+	}
+	// With HISTTIMEFORMAT, bash puts a time line before each command, so
+	// a quoted text of several lines, with no backslashes, is one command
+	// too, as bash 5.2 writes it; the lines written before HISTTIMEFORMAT
+	// was set are read as before.
+	quoted := "python3 -c 'print(1)\nprint(2)'"
+	stamped := "ls\necho old\n" +
+		"#1794990331\n" + quoted + "\n" +
+		"#1794990332\n" + docker + "\n" +
+		"#1794990333\n\n" + // a blank command
+		"#1794990334\ndocker ps\n"
+	if got, want := ParseShellHistory([]byte(stamped), false), []string{"ls", "echo old", quoted, docker, "docker ps"}; !slices.Equal(got, want) {
+		t.Errorf("bash, time lines %q,\nwant %q", got, want)
+	}
+	// A time line ends a command, as does the file's end.
+	if got := ParseShellHistory([]byte("echo a \\\n#1700000000\nls\n#1700000001\necho b \\\n"), false); !slices.Equal(got, []string{`echo a \`, "ls", `echo b \`}) {
+		t.Errorf("bash, cut: %q", got)
+	}
+	// A command with a control character in any line is left out whole.
+	if got := ParseShellHistory([]byte("ls\necho a \\\n\x1b[2J\\\nb\n"), false); !slices.Equal(got, []string{"ls"}) {
+		t.Errorf("bash, crafted: %q", got)
 	}
 }
 

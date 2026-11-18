@@ -4476,14 +4476,24 @@ func (msgs Messages) CmdBarKeys() string {
 	return Catalog.Format(msgs.locale, "cmdBarKeys", nil)
 }
 
-// CmdBarKeyEnter says "Sends the line to the shell"
+// CmdBarKeyEnter says "Sends the command to the shell, all its lines"
 // in the language the app shows.
 func CmdBarKeyEnter() string { return In(i18n.Locale()).CmdBarKeyEnter() }
 
-// CmdBarKeyEnter says "Sends the line to the shell"
+// CmdBarKeyEnter says "Sends the command to the shell, all its lines"
 // in the language of msgs.
 func (msgs Messages) CmdBarKeyEnter() string {
 	return Catalog.Format(msgs.locale, "cmdBarKeyEnter", nil)
+}
+
+// CmdBarKeyNewLine says "Starts a new line, for a command of several lines"
+// in the language the app shows.
+func CmdBarKeyNewLine() string { return In(i18n.Locale()).CmdBarKeyNewLine() }
+
+// CmdBarKeyNewLine says "Starts a new line, for a command of several lines"
+// in the language of msgs.
+func (msgs Messages) CmdBarKeyNewLine() string {
+	return Catalog.Format(msgs.locale, "cmdBarKeyNewLine", nil)
 }
 
 // CmdBarKeyTab says "Completes a path, or the command name in the first word"

@@ -1169,6 +1169,14 @@ and lists its keys (see [Terminal › Command bar](#terminal--command-bar)).
   return, as if it had been typed in the terminal (through the session's
   encoding), and clears the bar. The terminal keeps all its keys: the bar
   only has the keyboard while you are typing in it.
+- A command of several lines, taken from the history or written with
+  Shift+Enter, which starts a new line, makes the bar as high as its lines
+  (up to 8, past which it scrolls) until it is sent or emptied; Up opens
+  the history picker from its first line, and moves up a line from the
+  others. Enter sends all its lines as one command: pasted, as the
+  terminal pastes, so a shell that takes bracketed pastes (bash 5.1+,
+  zsh) reads them as one command, as it would from its own history, and
+  then a carriage return.
 - Tab completes the word at the caret:
   - a word that looks like a path (it has a `/`, or starts with `~` or
     `.`) opens the path picker, the server's folder in columns: folders
@@ -1181,8 +1189,9 @@ and lists its keys (see [Terminal › Command bar](#terminal--command-bar)).
     2000 entries are listed, with "and N more" after them. A name with a
     control character (a newline, an escape sequence) is shown dimmed,
     with the character escaped, and cannot be inserted: sent, a newline
-    would run what follows it as a command of its own. Command names and
-    lines of the server's history with one are left out.
+    would run what follows it as a command of its own. Command names with
+    one are left out, as are commands of the server's history with one
+    other than the newlines of a command of several lines.
   - the first word otherwise opens command completion: the commands on
     the server's PATH that start with it. They are read once per
     connection, over one exec channel, with bash's `compgen -c` (which
@@ -1207,14 +1216,23 @@ and lists its keys (see [Terminal › Command bar](#terminal--command-bar)).
   highlighted command, so `epel-release` can be taken out of
   `yum -y install epel-release` alone. Enter inserts the field in place of
   the word at the caret, or, with no field highlighted, puts the whole
-  command in the bar. "Clear list" deletes the host's history.
+  command in the bar. A command of several lines is one entry, its
+  newlines shown as ↵ and all its lines in its tooltip. "Clear list"
+  deletes the host's history.
 - The history is the app's own, per host: every command sent from the
   bar, each once, newest last, with no limit on how many (the file is cut
   from the oldest past 10 MB; see
   [configuration.md](configuration.md#command-history)). Below it come
   the commands of the server's `~/.bash_history` and `~/.zsh_history`,
-  read over SFTP once per connection, so commands typed in the terminal
-  show up too (bash writes its history file when the shell exits).
+  read over SFTP once per connection. bash writes its history file only
+  when the shell exits, unless `~/.bashrc` has
+  `PROMPT_COMMAND="history -a"`, which writes each command as it ends. A
+  command of several lines is read as one:
+  zsh's whole, as zsh marks its newlines; bash's whole when
+  `HISTTIMEFORMAT` is set, as bash then puts a time line before each
+  command; otherwise bash's file does not mark where a command of several
+  lines ends, and only one whose lines but the last end with a backslash,
+  as a `docker run … \` written over several lines, is read as one.
 - Enter sends to this session only, to its focused pane while it is
   split, whatever the Commands tab's "Send to" is set to, and never asks
   first. A command for several sessions is sent from the
@@ -2257,7 +2275,7 @@ is `optionAsAlt`.
 ### Terminal › Command bar
 
 Under "Show the command bar under the terminal", a "Keys" section lists
-the bar's keys: Enter, Tab, Up or the history shortcut, Left and Right in the history
+the bar's keys: Enter, Shift+Enter, Tab, Up or the history shortcut, Left and Right in the history
 picker, Esc, and the Focus command bar shortcut as it is bound on
 Terminal › Shortcuts. The bar itself shows no key help.
 

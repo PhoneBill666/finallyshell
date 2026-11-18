@@ -140,6 +140,69 @@ func TestCommandBarDisabled(t *testing.T) {
 	}
 }
 
+// A command of several lines in the history is one entry; taken, the bar
+// shows its lines, and Enter sends them as one command: pasted, bracketed
+// when the shell asks, and kept in the history whole. Shift+Enter starts
+// a new line.
+func TestCommandBarSeveralLines(t *testing.T) {
+	a, p, s, conn, tt := barTerm(t)
+	docker := "docker run -d \\\n  -p 80:80 \\\n  nginx"
+	config.AddHistory(s.Host.ID, "uptime")
+	config.AddHistory(s.Host.ID, docker)
+	focusBar(t, tt)
+	tt.Key(0, ui.KeyUp)
+	v := popupDone(t, p, a, s)
+	if got := itemNames(v); !slices.Equal(got, []string{docker, "uptime"}) {
+		t.Fatalf("history %q", got)
+	}
+	if !tt.HasText(historyLine(docker)) {
+		t.Errorf("no %q in %q", historyLine(docker), tt.Texts())
+	}
+	saveShot(t, tt, "commandbar-lines-history-en.png")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if s.bar.text != docker || !s.bar.lines || !s.bar.focused || s.bar.popup != popupNone {
+		t.Fatalf("taken: %q, lines %v, focused %v, popup %d", s.bar.text, s.bar.lines, s.bar.focused, s.bar.popup)
+	}
+	saveShot(t, tt, "commandbar-lines-en.png")
+	// Up below the first line moves the caret up a line, and opens
+	// nothing.
+	tt.Key(0, ui.KeyUp)
+	tt.Frame()
+	if s.bar.popup != popupNone {
+		t.Errorf("Up on the last line: popup %d", s.bar.popup)
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if got, want := conn.sent(t, s.term()), "docker run -d \\\r  -p 80:80 \\\r  nginx\r"; got != want {
+		t.Errorf("Enter sent %q, want %q", got, want)
+	}
+	tt.Frame()
+	if s.bar.text != "" || s.bar.lines || !s.bar.focused {
+		t.Errorf("after sending: %q, lines %v, focused %v", s.bar.text, s.bar.lines, s.bar.focused)
+	}
+	a.history.pending.Wait()
+	if list, _ := config.LoadHistory(s.Host.ID); !slices.Equal(list, []string{"uptime", docker}) {
+		t.Errorf("history file %q", list)
+	}
+
+	// Shift+Enter, then Enter with the shell taking bracketed pastes.
+	s.term().Feed([]byte("\x1b[?2004h"))
+	tt.Type("echo a")
+	tt.Key(ui.Shift, ui.KeyEnter)
+	tt.Frame()
+	tt.Type("echo b")
+	tt.Frame()
+	if s.bar.text != "echo a\necho b" || !s.bar.lines || !s.bar.focused {
+		t.Fatalf("Shift+Enter: %q, lines %v, focused %v", s.bar.text, s.bar.lines, s.bar.focused)
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if got, want := conn.sent(t, s.term()), "\x1b[200~echo a\necho b\x1b[201~\r"; got != want {
+		t.Errorf("bracketed: sent %q, want %q", got, want)
+	}
+}
+
 // barServer is a session to an in-process server whose SFTP serves home,
 // a made-up home folder, shown in the main window with the keyboard in
 // the bar.
@@ -152,7 +215,7 @@ func barServer(t *testing.T) (*App, *fakePlatform, *Session, *ui.Tester, string)
 	for name, data := range map[string]string{
 		"etc/hosts": "", "etc/hosts.allow": "", "etc/hostname": "", "etc/.secret": "", "etc/fstab": "",
 		"notes.txt": "", "my file.txt": "", "deploy.sh": "",
-		".bash_history": "ls -la\n#1700000000\nyum -y install epel-release\ncd /etc\n",
+		".bash_history": "ls -la\n#1700000000\nyum -y install epel-release\n#1700000001\ncd /etc\n",
 		".zsh_history":  ": 1700000000:0;git status\n",
 	} {
 		os.WriteFile(filepath.Join(home, name), []byte(data), 0o644)
@@ -562,7 +625,7 @@ func TestCommandBarPage(t *testing.T) {
 	}
 	a.settings.Shortcuts = config.Shortcuts{}
 	tt.Frame()
-	if got := a.commandBarKeys("darwin"); got[0].keys != "↩" || got[2].keys != "↑ / ⇧⌘H" {
+	if got := a.commandBarKeys("darwin"); got[0].keys != "↩" || got[1].keys != "⇧↩" || got[3].keys != "↑ / ⇧⌘H" {
 		t.Errorf("macOS keys %q", got)
 	}
 	saveShot(t, tt, "options-commandbar-en.png")
