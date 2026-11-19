@@ -16,6 +16,7 @@ import (
 	"finallyshell/locales"
 
 	"github.com/egoist/mygo/plugins/terminal"
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -278,10 +279,16 @@ func (a *App) openPaneShell(s *Session, p *pane, client *ssh.Client, spec shellS
 		return nil, &stepError{"shell", err}
 	}
 	topts := spec.topts
-	enter, conn := newEnterConn(termenc.Wrap(shell, spec.enc), func(line string) {
-		a.post(func() { a.typedLine(s, p, line) })
+	enter, conn := newEnterConn(termenc.Wrap(shell, spec.enc), func(text, pasted string) {
+		a.post(func() { a.typedLine(s, p, text, pasted) })
 	})
 	topts.Conn = conn
+	topts.OnPaste = func(d transfer.Data) bool {
+		if text, err := d.Read(transfer.Text); err == nil && a.historyOn() {
+			enter.pastedText(string(text)) // for the history, the command it makes
+		}
+		return false
+	}
 	keys := keySequences(spec.bs, spec.del, func() *terminal.Terminal { return p.term })
 	topts.OnKey = func(mods ui.Modifiers, key ui.Key) bool {
 		p.shellKey(mods, key) // for the file panel to follow a cd, and the tab its agent

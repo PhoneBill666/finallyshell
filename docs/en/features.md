@@ -1228,7 +1228,11 @@ and lists its keys (see [Terminal › Command bar](#terminal--command-bar)).
   prompt's first `$ `, `# ` or `% `, the ends of bash's, root's and
   zsh's prompts. A command whose next lines come after the shell's `> `,
   as a quoted text, a heredoc or lines ending with a backslash, is kept
-  whole. Lines after other prompts, as Python's `>>>`, and what the shell
+  whole. So is a text of several lines pasted in the terminal, which
+  bash 5.1+ and zsh show with no `> ` before its lines: kept as pasted,
+  with its indentation and tabs, once the screen holds the whole paste,
+  or, with text typed before or after it, as the screen shows it. Lines
+  after other prompts, as Python's `>>>`, and what the shell
   does not echo, as a password, are not kept.
 - Below the app's history come the commands of the server's
   `~/.bash_history` and `~/.zsh_history`, read over SFTP once per
